@@ -1,0 +1,37 @@
+# ============================================================
+# CI PIPELINE — Validate → Build → Test → Security Scan
+# Runs on every push to main and every Pull Request
+# ============================================================
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Which runner to use — "self-hosted" means YOUR private runner
+jobs:
+
+# ──────────────────────────────────────────────────────────────
+# JOB 1: VALIDATE CODE
+# Checks HTML syntax so broken code never reaches Docker build
+# ──────────────────────────────────────────────────────────────
+  validate:
+    name: Validate Code
+    runs-on: self-hosted          # ← your private runner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        # This downloads your repo onto the runner machine
+
+      - name: Install HTML validator
+        run: |
+          npm install -g html-validate
+          # html-validate is a CLI tool that checks HTML files for errors
+
+      - name: Validate HTML file
+        run: |
+          html-validate "*.html"
+          echo "✅ HTML validation passed"
