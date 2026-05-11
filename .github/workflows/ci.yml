@@ -28,10 +28,10 @@ jobs:
 
       - name: Install HTML validator
         run: |
-          sudo npm install -g html-validate
+          sudo npm install html-validate
           # html-validate is a CLI tool that checks HTML files for errors
 
       - name: Validate HTML file
         run: |
-          html-validate "*.html"
+          npx html-validate "*.html"
           echo "✅ HTML validation passed"
