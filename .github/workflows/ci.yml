@@ -74,3 +74,46 @@ jobs:
         with:
           name: image-tag
           path: image_tag.txt
+
+# ──────────────────────────────────────────────────────────────
+# JOB 3: RUN CONTAINER TEST
+# Starts your container and checks it actually works
+# ──────────────────────────────────────────────────────────────
+  test:
+    name: Container Test
+    runs-on: self-hosted
+    needs: build
+
+    steps:
+      - name: Download image tag
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tag
+
+      - name: Load image tag
+        id: tag
+        run: echo "IMAGE_TAG=$(cat image_tag.txt)" >> $GITHUB_OUTPUT
+
+      - name: Run container
+        run: |
+          # Start container in background (-d), map port 8080 on host to 80 in container
+          docker run -d \
+            --name test-container \
+            -p 8080:80 \
+            ${{ secrets.DOCKERHUB_USERNAME }}/myapp:${{ steps.tag.outputs.IMAGE_TAG }}
+
+      - name: Wait for container to be ready
+        run: sleep 5
+        # Give the container a few seconds to fully start
+
+      - name: Test container responds
+        run: |
+          # curl fetches the page; -f makes it fail if HTTP error code returned
+          curl -f http://localhost:8080 || exit 1
+          echo "✅ Container responded successfully"
+
+      - name: Cleanup test container
+        if: always()             # ← runs even if the test above failed
+        run: |
+          docker stop test-container || true
+          docker rm test-container  || true
