@@ -138,18 +138,12 @@ jobs:
         id: tag
         run: echo "IMAGE_TAG=$(cat image_tag.txt)" >> $GITHUB_OUTPUT
 
-      - name: Install Trivy (vulnerability scanner)
-        run: |
-          # Trivy is an open-source security scanner by Aqua Security
-          wget -qO- https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-
-      - name: Run Trivy scan
-        run: |
-          trivy image \
-            --exit-code 1 \
-            --severity HIGH,CRITICAL \
-            --no-progress \
-            ${{ secrets.DOCKERHUB_USERNAME }}/myapp:${{ steps.tag.outputs.IMAGE_TAG }}
-          # --exit-code 1 = fail the pipeline if HIGH or CRITICAL vulnerabilities found
-          echo "✅ Security scan passed"
+      - name: Run Trivy security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/myapp:${{ steps.tag.outputs.IMAGE_TAG }}
+          format: table
+          exit-code: '1'
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
 
