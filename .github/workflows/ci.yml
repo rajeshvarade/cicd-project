@@ -35,3 +35,42 @@ jobs:
         run: |
           npx html-validate "*.html"
           echo "✅ HTML validation passed"
+# ──────────────────────────────────────────────────────────────
+# JOB 2: BUILD DOCKER IMAGE
+# Creates a Docker image from your HTML project
+# Only runs if validate job passes
+# ──────────────────────────────────────────────────────────────
+  build:
+    name: Build Docker Image
+    runs-on: self-hosted
+    needs: validate              # ← waits for validate to succeed
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set image tag
+        id: vars
+        run: |
+          # Use the short Git commit hash as the image version tag
+          # e.g. myapp:version01
+          echo "IMAGE_TAG=version01" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/myapp:${{ steps.vars.outputs.IMAGE_TAG }} \
+            -t ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest \
+            .
+          # -t = tag name   . = build from current directory (uses Dockerfile)
+          echo "✅ Docker image built: ${{ steps.vars.outputs.IMAGE_TAG }}"
+
+      # Save the tag so the next jobs can use it
+      - name: Export image tag
+        run: echo "${{ steps.vars.outputs.IMAGE_TAG }}" > image_tag.txt
+
+      - name: Upload image tag artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-tag
+          path: image_tag.txt
