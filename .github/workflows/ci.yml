@@ -147,3 +147,41 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
 
+
+# ──────────────────────────────────────────────────────────────
+# JOB 5: PUSH TO DOCKERHUB
+# Only pushes if ALL previous jobs passed
+# Uses secrets — never hardcoded credentials!
+# ──────────────────────────────────────────────────────────────
+  push:
+    name: Push to DockerHub
+    runs-on: self-hosted
+    needs: security-scan
+
+    steps:
+      - name: Download image tag
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tag
+
+      - name: Load image tag
+        id: tag
+        run: echo "IMAGE_TAG=$(cat image_tag.txt)" >> $GITHUB_OUTPUT
+
+      - name: Login to DockerHub
+        run: |
+          # Uses GitHub Secrets — go to Settings → Secrets → Actions to add these
+          echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+          # --password-stdin = safer than passing password as argument
+
+      - name: Push image to DockerHub
+        run: |
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/myapp:${{ steps.tag.outputs.IMAGE_TAG }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/myapp:latest
+          echo "✅ Image pushed to DockerHub"
+
+      - name: Logout from DockerHub
+        if: always()
+        run: docker logout
+
+
