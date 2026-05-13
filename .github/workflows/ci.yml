@@ -117,3 +117,39 @@ jobs:
         run: |
           docker stop test-container || true
           docker rm test-container  || true
+
+
+# ──────────────────────────────────────────────────────────────
+# JOB 4: SECURITY SCAN
+# Uses Trivy to scan the Docker image for known CVEs
+# ──────────────────────────────────────────────────────────────
+  security-scan:
+    name: Security Scan
+    runs-on: self-hosted
+    needs: test
+
+    steps:
+      - name: Download image tag
+        uses: actions/download-artifact@v4
+        with:
+          name: image-tag
+
+      - name: Load image tag
+        id: tag
+        run: echo "IMAGE_TAG=$(cat image_tag.txt)" >> $GITHUB_OUTPUT
+
+      - name: Install Trivy (vulnerability scanner)
+        run: |
+          # Trivy is an open-source security scanner by Aqua Security
+          wget -qO- https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
+      - name: Run Trivy scan
+        run: |
+          trivy image \
+            --exit-code 1 \
+            --severity HIGH,CRITICAL \
+            --no-progress \
+            ${{ secrets.DOCKERHUB_USERNAME }}/myapp:${{ steps.tag.outputs.IMAGE_TAG }}
+          # --exit-code 1 = fail the pipeline if HIGH or CRITICAL vulnerabilities found
+          echo "✅ Security scan passed"
+
