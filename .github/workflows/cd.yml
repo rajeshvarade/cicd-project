@@ -1,0 +1,47 @@
+# ============================================================
+# CD PIPELINE — Deploy to Azure VM
+# Triggers automatically after CI pipeline succeeds on main
+# You must create the Azure VM manually first (Azure Portal)
+# ============================================================
+name: CD Pipeline
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]   # ← name must match ci.yml "name:" exactly
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+
+# ──────────────────────────────────────────────────────────────
+# JOB 1: VERIFY VM + SSH CONNECTION
+# Makes sure your Azure VM is reachable before deploying
+# ──────────────────────────────────────────────────────────────
+  verify-vm:
+    name: Verify VM and SSH
+    runs-on: self-hosted
+    # Only run if the CI pipeline actually succeeded
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Test SSH connection to Azure VM
+        run: |
+          # Create the .ssh directory if it doesn't exist
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # Save the private SSH key from GitHub Secret to a temp file
+          echo "${{ secrets.AZURE_VM_SSH_KEY }}" > ~/.ssh/azure_vm_key
+          chmod 600 ~/.ssh/azure_vm_key
+          # chmod 600 = only the owner can read/write (SSH requirement)
+
+          # Add VM to known_hosts to avoid "authenticity" prompt
+          ssh-keyscan -H ${{ secrets.AZURE_VM_HOST }} >> ~/.ssh/known_hosts
+
+          # Test connection — runs a simple command on the VM
+          ssh -i ~/.ssh/azure_vm_key \
+              -o ConnectTimeout=10 \
+              ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }} \
+              "echo '✅ SSH connection successful' && whoami && uptime"
