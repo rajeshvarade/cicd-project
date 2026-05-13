@@ -68,7 +68,9 @@ jobs:
 
           # SSH into VM and run deployment commands
           ssh -i ~/.ssh/azure_vm_key \
-              ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }} << 'DEPLOY_SCRIPT'
+              ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }} \
+              "DOCKERHUB_USERNAME='${{ secrets.DOCKERHUB_USERNAME }}' \
+              DOCKERHUB_TOKEN='${{ secrets.DOCKERHUB_TOKEN }}' bash -s" << 'DEPLOY_SCRIPT'
 
             echo "🚀 Starting deployment..."
 
