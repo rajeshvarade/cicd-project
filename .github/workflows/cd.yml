@@ -151,3 +151,42 @@ jobs:
               ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }} \
               "docker ps --filter name=cicd-app --format 'Container: {{.Names}} | Status: {{.Status}}'"
 
+
+# ──────────────────────────────────────────────────────────────
+# JOB 4: NOTIFY SUCCESS OR FAILURE
+# Sends a notification when deployment finishes (pass or fail)
+# Using GitHub's built-in notification (no extra tool needed)
+# ──────────────────────────────────────────────────────────────
+  notify:
+    name: Notify Result
+    runs-on: self-hosted
+    needs: [ deploy, health-check ]
+    if: always()                 # ← always runs, even if deploy failed
+
+    steps:
+      - name: Notify success
+        if: ${{ needs.health-check.result == 'success' }}
+        run: |
+          echo "✅ DEPLOYMENT SUCCESSFUL"
+          echo "App is live at: http://${{ secrets.AZURE_VM_HOST }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          # To send Slack/email notifications, add a step here using
+          # webhooks or the slackapi/slack-github-action@v1 action
+
+      - name: Notify failure
+        if: ${{ needs.health-check.result != 'success' }}
+        run: |
+          echo "❌ DEPLOYMENT FAILED"
+          echo "Check the logs above to find which step failed"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          exit 1
+          # Exiting with 1 marks the whole workflow as failed in GitHub UI
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/azure_vm_key
+        # Always delete the private key from disk after use
+
+
