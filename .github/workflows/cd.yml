@@ -123,7 +123,7 @@ jobs:
           # Try to reach your app's public URL
           # Replace with your actual Azure VM public IP or domain
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://${{ secrets.AZURE_VM_HOST }})
+            http://localhost)
 
           echo "HTTP Status: $HTTP_STATUS"
 
