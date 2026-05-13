@@ -103,3 +103,83 @@ jobs:
           # Pass DockerHub credentials as environment variables into the SSH session
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+# ──────────────────────────────────────────────────────────────
+# JOB 3: HEALTH CHECK
+# Verifies your app is live and responding after deployment
+# ──────────────────────────────────────────────────────────────
+  health-check:
+    name: Health Check
+    runs-on: self-hosted
+    needs: deploy
+
+    steps:
+      - name: Wait for app to start
+        run: sleep 15
+        # Give the new container 15 seconds to fully initialise
+
+      - name: Check app is live
+        run: |
+          # Try to reach your app's public URL
+          # Replace with your actual Azure VM public IP or domain
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            http://${{ secrets.AZURE_VM_HOST }})
+
+          echo "HTTP Status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ App is healthy and responding!"
+          else
+            echo "❌ Health check failed! Status: $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Check container is running on VM
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.AZURE_VM_SSH_KEY }}" > ~/.ssh/azure_vm_key
+          chmod 600 ~/.ssh/azure_vm_key
+          ssh-keyscan -H ${{ secrets.AZURE_VM_HOST }} >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/azure_vm_key \
+              ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }} \
+              "docker ps --filter name=cicd-app --format 'Container: {{.Names}} | Status: {{.Status}}'"
+
+
+
+# ──────────────────────────────────────────────────────────────
+# JOB 4: NOTIFY SUCCESS OR FAILURE
+# Sends a notification when deployment finishes (pass or fail)
+# Using GitHub's built-in notification (no extra tool needed)
+# ──────────────────────────────────────────────────────────────
+  notify:
+    name: Notify Result
+    runs-on: self-hosted
+    needs: [ deploy, health-check ]
+    if: always()                 # ← always runs, even if deploy failed
+
+    steps:
+      - name: Notify success
+        if: ${{ needs.health-check.result == 'success' }}
+        run: |
+          echo "✅ DEPLOYMENT SUCCESSFUL"
+          echo "App is live at: http://${{ secrets.AZURE_VM_HOST }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          # To send Slack/email notifications, add a step here using
+          # webhooks or the slackapi/slack-github-action@v1 action
+
+      - name: Notify failure
+        if: ${{ needs.health-check.result != 'success' }}
+        run: |
+          echo "❌ DEPLOYMENT FAILED"
+          echo "Check the logs above to find which step failed"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          exit 1
+          # Exiting with 1 marks the whole workflow as failed in GitHub UI
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/azure_vm_key
+        # Always delete the private key from disk after use
