@@ -109,3 +109,45 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
+
+# ──────────────────────────────────────────────────────────────
+# JOB 3: HEALTH CHECK
+# Verifies your app is live and responding after deployment
+# ──────────────────────────────────────────────────────────────
+  health-check:
+    name: Health Check
+    runs-on: self-hosted
+    needs: deploy
+
+    steps:
+      - name: Wait for app to start
+        run: sleep 15
+        # Give the new container 15 seconds to fully initialise
+
+      - name: Check app is live
+        run: |
+          # Try to reach your app's public URL
+          # Replace with your actual Azure VM public IP or domain
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            http://${{ secrets.AZURE_VM_HOST }})
+
+          echo "HTTP Status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ App is healthy and responding!"
+          else
+            echo "❌ Health check failed! Status: $HTTP_STATUS"
+            exit 1
+          fi
+
+      - name: Check container is running on VM
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.AZURE_VM_SSH_KEY }}" > ~/.ssh/azure_vm_key
+          chmod 600 ~/.ssh/azure_vm_key
+          ssh-keyscan -H ${{ secrets.AZURE_VM_HOST }} >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/azure_vm_key \
+              ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }} \
+              "docker ps --filter name=cicd-app --format 'Container: {{.Names}} | Status: {{.Status}}'"
+
