@@ -45,3 +45,61 @@ jobs:
               -o ConnectTimeout=10 \
               ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }} \
               "echo '✅ SSH connection successful' && whoami && uptime"
+
+
+
+# ──────────────────────────────────────────────────────────────
+# JOB 2: DEPLOY CONTAINER TO AZURE VM
+# SSHes into your VM and pulls + runs the new Docker image
+# ──────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy Container
+    runs-on: self-hosted
+    needs: verify-vm
+
+    steps:
+      - name: Deploy to Azure VM via SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.AZURE_VM_SSH_KEY }}" > ~/.ssh/azure_vm_key
+          chmod 600 ~/.ssh/azure_vm_key
+          ssh-keyscan -H ${{ secrets.AZURE_VM_HOST }} >> ~/.ssh/known_hosts
+
+          # SSH into VM and run deployment commands
+          ssh -i ~/.ssh/azure_vm_key \
+              ${{ secrets.AZURE_VM_USER }}@${{ secrets.AZURE_VM_HOST }} << 'DEPLOY_SCRIPT'
+
+            echo "🚀 Starting deployment..."
+
+            # Step 1: Login to DockerHub on the VM
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            # Note: These env vars are passed in the ssh command below
+
+            # Step 2: Pull the latest image
+            docker pull $DOCKERHUB_USERNAME/myapp:latest
+            echo "✅ Image pulled from DockerHub"
+
+            # Step 3: Stop and remove the old running container (if it exists)
+            docker stop cicd-app 2>/dev/null || true
+            docker rm   cicd-app 2>/dev/null || true
+            # 2>/dev/null suppresses the "container not found" error on first deploy
+
+            # Step 4: Run the new container
+            docker run -d \
+              --name cicd-app \
+              --restart always \
+              -p 80:80 \
+              $DOCKERHUB_USERNAME/myapp:latest
+            # --restart always = auto-starts if VM reboots
+
+            echo "✅ New container started"
+
+            # Step 5: Logout from DockerHub on VM
+            docker logout
+
+          DEPLOY_SCRIPT
+        env:
+          # Pass DockerHub credentials as environment variables into the SSH session
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
